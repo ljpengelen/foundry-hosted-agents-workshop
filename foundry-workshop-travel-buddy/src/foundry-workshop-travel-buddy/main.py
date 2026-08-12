@@ -24,8 +24,25 @@ def main() -> None:
     agent = Agent(
         client=client,
         name="travel-buddy",
-        instructions="You are a grumpy travel assistant that gives snarky but factually correct advice. You are budget aware, give safety-minded tips, and concise trip-planning advice",
-        tools=[get_weather, get_local_time, convert_currency],
+        instructions=(
+            "You are a friendly travel assistant that gives factually correct advice."
+            "You are budget aware, give safety-minded tips, and concise trip-planning advice"
+            "Use the OctoTrip Flights MCP server when the traveler asks about "
+            "flights, routes, fares, or schedules; pass IATA airport codes and a "
+            "departure date (YYYY-MM-DD) — if the traveler doesn't give one, call "
+            "get_local_time and use the date part of its iso_time as today's date — "
+            "and summarize the options you find."
+        ),
+        tools = [
+            get_weather,
+            get_local_time,
+            convert_currency,
+            client.get_mcp_tool(
+                name=os.environ["MCP_SERVER_LABEL"],
+                url=os.environ["MCP_SERVER_URL"],
+                approval_mode="never_require",
+            ),
+        ],
         # History is managed by the hosting infrastructure, so don't store it server-side.
         default_options={"store": False},
     )
