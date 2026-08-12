@@ -5,7 +5,7 @@ import os
 
 from agent_framework import Agent
 from agent_framework.foundry import FoundryChatClient
-from agent_framework_foundry_hosting import ResponsesHostServer
+from agent_framework_foundry_hosting import FoundryToolbox, ResponsesHostServer
 from azure.identity import DefaultAzureCredential
 from dotenv import load_dotenv
 from tools import convert_currency, get_local_time, get_weather
@@ -14,12 +14,21 @@ load_dotenv(override=True)
 
 
 def main() -> None:
+    credential = DefaultAzureCredential()
+
     # Foundry model client, built from your .env settings.
     client = FoundryChatClient(
         project_endpoint=os.environ["AZURE_AI_PROJECT_ENDPOINT"],
         model=os.environ["AZURE_AI_MODEL_DEPLOYMENT_NAME"],
-        credential=DefaultAzureCredential(),
+        credential=credential,
     )
+
+    # FoundryToolbox resolves the toolbox endpoint from the environment
+    # (TOOLBOX_ENDPOINT, or FOUNDRY_PROJECT_ENDPOINT + TOOLBOX_NAME), authenticates
+    # every request with the credential, and transparently forwards the platform
+    # per-request call-id to the toolbox. The hosting server enters the agent, which
+    # connects the toolbox on first use and closes it at shutdown.
+    toolbox = FoundryToolbox(credential)
 
     agent = Agent(
         client=client,
@@ -27,21 +36,17 @@ def main() -> None:
         instructions=(
             "You are a friendly travel assistant that gives factually correct advice."
             "You are budget aware, give safety-minded tips, and concise trip-planning advice"
-            "Use the OctoTrip Flights MCP server when the traveler asks about "
-            "flights, routes, fares, or schedules; pass IATA airport codes and a "
-            "departure date (YYYY-MM-DD) — if the traveler doesn't give one, call "
-            "get_local_time and use the date part of its iso_time as today's date — "
-            "and summarize the options you find."
+            "Use the Foundry Toolbox for flight search (when the traveler gives no "
+            "departure date, call get_local_time and use the date part of its "
+            "iso_time as today's date), for web search of current "
+            "travel advisories and events, and for Code Interpreter to analyze an "
+            "uploaded itinerary.csv (budget totals, currency conversion, charts)."
         ),
         tools = [
             get_weather,
             get_local_time,
             convert_currency,
-            client.get_mcp_tool(
-                name=os.environ["MCP_SERVER_LABEL"],
-                url=os.environ["MCP_SERVER_URL"],
-                approval_mode="never_require",
-            ),
+            toolbox,
         ],
         # History is managed by the hosting infrastructure, so don't store it server-side.
         default_options={"store": False},
